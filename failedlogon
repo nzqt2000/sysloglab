@@ -1,0 +1,42 @@
+input {
+  beats {
+    port => 5044
+  }
+}
+
+filter {
+  if [type] == "windows_event_logs" {
+    grok {
+      match => { "message" => "%{SYSLOGTIMESTAMP:timestamp} %{HOSTNAME:hostname} %{DATA:winlog.event_data}" }
+    }
+    date {
+      match => [ "timestamp", "MMM d HH:mm:ss", "MMM dd HH:mm:ss" ]
+    }
+
+    if [winlog][event_id] == 4624 {
+      mutate {
+        add_tag => [ "login_attempt" ]
+      }
+
+      kv {
+        source => "winlog.event_data"
+        target => "event_data"
+        field_split => ","
+      }
+
+      mutate {
+        add_field => {
+          "user_name" => "%{[event_data][TargetUserName]}"
+          "source_address" => "%{[event_data][IpAddress]}"
+        }
+      }
+    }
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["your_elasticsearch_host:9200"]
+    index => "your_index_name"
+  }
+}
